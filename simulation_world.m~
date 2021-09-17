@@ -30,7 +30,7 @@ fs_kHz = 5;
 
 % Set the tempo and the octive for the conductor
 Octive = 8;
-tempo_s = 0.6; %This is the time in seconds for each note
+tempo_s = 0.6 %This is the time in seconds for each note
 
 %% Parameters for code simulation
 tempo_resolution = .05; %this is a value between 0 and 1. 1 being full resolution
@@ -93,6 +93,11 @@ ylabel("Amplitude")
 title("Spectrum of Row Row Row Your Boat")
 
 %% Do the envelope detection
+% figure()
+% [up,lo] = envelope(digital,200,'rms');
+% plot(time_s,up)
+
+%%
 Fs = 5000;
 fnyq = Fs/2; % Nyquist Frequncy
 %y = abs(digital - mean(digital)); %Rectifies signal by removing mean value
@@ -103,29 +108,46 @@ fco = 20; %Final cutoff frequency
 [b,a] = butter(2,fco*1.25/fnyq);
 
 % Zero-phase digital filter
+%z = filtfilt(b,a,y);
 figure()
 z = filtfilt(b,a,abs(digital));
 plot(time_s,z,'r');
 
 %plot(time_s,digital-mean(digital)-4,'b',time_s,y,'g',time_s,z,'r');
 xlabel('Time (s)'); ylabel('Voltage (V)');
-%legend('Raw (offset)','Linear envelope');
+legend('Raw (offset)','Linear envelope');
 
 %% Find the Tempo
 % Find difference in time between max and min (i.e. rise and fall of note)
 diff_digital = diff(z);
-diff_digital = diff_digital .* (abs(diff_digital) > .004);
+% [~,min_locs] = findpeaks(digital,'MinPeakDistance',.002);
+% locs_Qwave = min_locs(diff_digital(min_locs)>-0.005 & diff_digital(min_locs)<-0.002);
+% 
+% figure()
+% plot(locs_Qwave,diff_digital(locs_Qwave),'rs','MarkerFaceColor','g')
+% plot(time_s(1:length(time_s)-1),diff_digital)
+%plot(time_s(1:length(time_s)),digital)
+%plot(time_s(1:length(time_s)-1),diff_digital)
+
+% [pks,locs, w, p] = findpeaks(diff_digital,time_s(1:length(time_s)-1),'Annotate','extents');
+% max_pk = max(pks);
+% idx = find(abs(pks)<(max_pk/2));
+% pks(idx) = [];
+% %findpeaks(diff_digital,time_s(1:length(time_s)-1))
+% first_peak = find(abs(diff_digital) == pks(0));
+% second_peak = find(abs(diff_digital) == pks(1));
+% findpeaks(diff_digital,time_s(1:length(time_s)-1),'MinPeakDistance',.004);
+diff_digital = diff_digital .* (diff_digital > .004);
 x = time_s(1:length(time_s)-1);
 TF = islocalmax(diff_digital);
-TF2 = islocalmin(diff_digital);
-Total = TF + TF2;
-plot(x,diff_digital,x(TF),diff_digital(TF),'r*',x(TF2),diff_digital(TF2),'r*')
+plot(x,diff_digital,x(TF),diff_digital(TF),'r*')
 maxes = x(TF);
-mins = x(TF2);
-tempo = abs(mins(1) - maxes(2))
+diff = maxes(2) - maxes(1);
+
 
 
 %% Sync the time
+
 actual_time_offset_s = time_s(time_offset) %print out the actual start time to compare.
 
 
