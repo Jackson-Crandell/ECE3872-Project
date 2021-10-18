@@ -1,0 +1,129 @@
+#include <stdio.h>
+#include <math.h>
+
+#define TempoCal 512
+#define TempoPotMax 1023
+#define PwmMax 255
+
+#define rest 0
+
+#define Octive 2
+
+//Music Notes based on Octive--
+#define C 16.3516*pow(2,Octive)
+#define D 18.35405*pow(2,Octive)
+#define E 20.60172*pow(2,Octive)
+#define F 21.82676*pow(2,Octive)
+#define G 24.49971*pow(2,Octive)
+#define A 27.5*pow(2,Octive)
+#define B 30.86771*pow(2,Octive)
+#define high_C 32.70320*pow(2,Octive)
+#define rest 0
+
+int analogPin = A0;       
+float analogval = 0;
+int digitalPin = 4;
+int digitalval = 0;
+int digitalLED = 7;
+int threshold = 300;
+int scaled_analog;
+
+//Row Row Row Your Boat
+int songLength = 54;  
+float notes[] = {C, rest, C, rest, C, rest, D, rest, E, rest, E, rest, D, rest, E, rest, F, rest, G, rest, high_C, rest, high_C, rest, high_C, rest, G, rest, G, rest, G, rest, E, rest, E, rest, E, rest, C, rest, C, rest, C, rest, G, rest, F, rest, E, rest, D, rest, C, rest};
+int beats[] = {2,1,2,1,2,1,1,1,2,1,2,1,1,1,2,1,1,1,6,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,1,1,1,2,1,1,1,5,1};
+
+//int songLength = 28;  
+//int notes[] = {C, C, C, D, E, E, D, E, F, G, high_C, high_C, high_C, G, G, G, E, E, E, C, C, C, G, F, E, D, C, rest};
+//int beats[] = {3,3,2,1,3,2,1,2,1,6,1,1,1,1,1,1,1,1,1,1,1,1,2,1,2,1,5,1};
+int song_tempo = 250;
+
+int time_now = millis();
+int time_later = millis();
+int first_peak = 0;
+int second_peak = 0;
+bool hasRun1 = false;
+bool hasRun2 = false;
+
+void setup() {
+  // put your setup code here, to run once:
+  Serial.begin(9600);
+  pinMode(digitalPin, INPUT);
+  pinMode(digitalLED, OUTPUT);
+  //debug only
+  //Serial.begin(9600);
+  Serial.print("Setup Complete\n");
+
+}
+
+void loop() {
+
+  // Mode Selection
+  // Case 1: Play
+  // Case 2: Debug
+  // Test Audio Subsystem
+  // Wait for audio signal to play
+  
+  //Serial.print("Waiting for Audio Signal\n");
+
+  // Find end of first peak
+  if(!hasRun1)
+  {
+    // Read Analog Pin
+    analogval = analogRead(analogPin);
+    scaled_analog = (int) analogval * (5.0 / 1023.0) - .79; 
+    Serial.println(scaled_analog);
+    if(scaled_analog == 1)
+    {
+      while(scaled_analog == 1)
+      {
+        analogval = analogRead(analogPin);
+        scaled_analog = (int) analogval * (5.0 / 1023.0) - .79; 
+        Serial.println(scaled_analog);
+      }
+      first_peak = millis(); // Time of first peak
+      hasRun1 = true;
+    }
+  }
+
+  if(hasRun1 && !hasRun2)
+  {
+    // Read Analog Pin
+    analogval = analogRead(analogPin);
+    scaled_analog = (int) analogval * (5.0 / 1023.0) - .79; 
+    Serial.println(scaled_analog);
+    if(scaled_analog == 1)
+    {
+      second_peak = millis(); // Time of first peak
+      hasRun2 = true;
+      Serial.print("First Peak: ");
+      Serial.print(first_peak);
+      Serial.print("\nSecond Peak: ");
+      Serial.print(second_peak);
+    }
+  }
+
+  
+      /*
+      while(scaled_analog == 1
+      time_later = millis();
+      Serial.print(time_now - time_later);
+      while (time_later - time_now < 2000) // For One Second
+      {
+        analogval = analogRead(analogPin);
+        scaled_analog = (int) analogval * (5.0 / 1023.0) - .79;
+        Serial.println(scaled_analog);
+        time_later = millis();
+      }*/
+  
+  
+  /*// Will listen for 0.5s
+  if(millis() - time_now < 500)
+  {
+    scaled_analog = (int) analogval * (5.0 / 1023.0) - .79; 
+    Serial.println(scaled_analog);
+  }*/
+
+  
+
+}
