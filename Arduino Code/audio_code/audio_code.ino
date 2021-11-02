@@ -17,7 +17,7 @@
 #define high_C 32.70320*pow(2,Octive)
 #define rest 0
 
-int analogPin = A0;       
+int analogPin = A5;       
 float analogval = 0;
 int scaled_analog;
 
@@ -72,7 +72,7 @@ int findTempo(int (&vReal)[SAMPLES], int (&vTime)[SAMPLES])
         break;
       }
     }
-    Serial.print("Tempo: " );
+    Serial.print("\nTempo: " );
     Serial.println(vTime[idx_second_peak-1]-vTime[idx_first_peak]);
     tempo += vTime[idx_second_peak-1]-vTime[idx_first_peak];
     t++;
@@ -186,7 +186,7 @@ void loop() {
       count = 0; // Reset loop if it doesn't break
     }
     analogval = analogRead(analogPin);
-    temp[count] = (int) analogval * (5.0 / 1023.0) - .79;
+    temp[count] = (int) analogval / 650;
     int temp_count = 0;
     for(int i = 0; i < sizeof(temp)/temp[0]; i++)
     {
@@ -209,7 +209,7 @@ void loop() {
     Serial.println("Starting Tempo Detection");
 
     analogval = analogRead(analogPin);
-    scaled_analog = (int) analogval * (5.0 / 1023.0) - .79; 
+    scaled_analog = (int) analogval / 650; 
     //Serial.println(scaled_analog);
     //Serial.println("Starting to sample");
     
@@ -218,7 +218,7 @@ void loop() {
     {
         milliseconds = millis();    //Overflows after around 70 minutes!
         analogval = analogRead(analogPin);
-        scaled_analog = (int) analogval * (5.0 / 1023.0) - .79;
+        scaled_analog = (int) analogval / 650;
         vReal[i] = scaled_analog;
         vTime[i] = millis();
      

@@ -30,11 +30,11 @@ fs_kHz = 5;
 
 % Set the tempo and the octive for the conductor
 Octive = 4;
-tempo_s = 0.15 %This is the time in seconds for each note
+tempo_s = 0.300 %This is the time in seconds for each note
 
 %% Parameters for code simulation
 %tempo_resolution = .07; %this is a value between 0 and 1. 1 being full resolution
-time_offset = 15;   % This is the delay to the start of the song.
+time_offset = 18;   % This is the delay to the start of the song.
   
 %% Create the song given the tempo
 [song_freq_Hz, song_duration_s] = conductor_simulation(tempo_s,Octive);
@@ -77,7 +77,7 @@ signal = circshift(signal, time_offset);
 
 %% Write audio signal
 %sound(digital,5000)
-audiowrite("rowrow_d15_t150_o4_long.wav",signal,5000);
+audiowrite("rowrow_d18_t300_o4_long.wav",signal,5000);
 
 %% Plot the Time Domain
 figure(1)
