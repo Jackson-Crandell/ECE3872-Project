@@ -15,7 +15,7 @@ void setup() {
 
 void loop() {
   analogval = analogRead(analogPin);
-  scaled_analog = (int) analogval / 600; //* (5.0 / 1023.0) - .8;
+  scaled_analog = (int) analogval; //* (5.0 / 1023.0) - .8;
   if (scaled_analog == 1)
   {
     digitalWrite(digitalLED, 1);

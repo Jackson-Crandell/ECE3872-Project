@@ -1,5 +1,5 @@
 //-----------------------------------------------------
-// Engineer: Rafael Laury
+// Engineer: Rafael Laury & Jack Crandell
 // Based on: Code by Tim Brothers
 // Overview
 //    When this device is turned on it plays the song Row
@@ -15,7 +15,7 @@
 //
 // History:       4 January 2020 File created
 //          20 September 2021 Adapted for Chimp Cymbalist
-//
+//          12 November 2021 Finalized for Chimp Cymbalist
 //-----------------------------------------------------
 
 #include <Servo.h>
@@ -27,7 +27,7 @@
 #define PwmMax 255
 
 
-#define SAMPLES 256             //Must be a power of 2
+#define SAMPLES 256               //Must be a power of 2
 #define SAMPLING_FREQUENCY 10000 //Hz, must be less than 10000 due to ADC
 
 //Music Notes based on Octave--
@@ -44,7 +44,7 @@ float high_C = 32.70320;
 #define speakerPIN 9
 
 //IO definitions
-#define octaveUp A1 //active low
+#define octaveUp A1   //active low
 #define octaveDown A0 //active low
 #define tempoKnob A2
 #define resetButton A3 //active low
@@ -76,34 +76,64 @@ Servo rightServo;
 unsigned int sampling_period_ms;
 unsigned long milliseconds;
 
-// Method to find tempo
-int findTempo(int (&vReal)[SAMPLES], int (&vTime)[SAMPLES])
+
+/**
+ * Resets arms
+ * 
+ */
+void resetArms() {
+  leftServo.write(80);
+  rightServo.write(122);
+}
+
+/**
+ * Finds tempo of song by finding the length of rest notes. It does this 
+ * five times and finds the median as the tempo.
+ * 
+ *
+ * @param &vReal[Samples] is the voltage values from analog sensor (mic or aux cable)
+ * @param &vTime[Samples] are the time stamps of the voltage signal
+ * 
+ */
+int findTempo(int (&vReal)[SAMPLES], int (&vTime)[SAMPLES],bool &reset)
 {
-  int tempo = 0;
+  int tempo[5];
   int t = 0;
   int idx_first_peak, idx_second_peak = 0;
   while(t < 5)
   {
-    //Find first,last one of note
+    //Find first peak,last one of note
     for(int i = idx_second_peak; i<(SAMPLES);i++)
     {
       if(vReal[i] == 1 || vReal[i] == 2)
       {
-        while(vReal[i] != 0 && i != 256) // TODO: Add error condition for over 256?
+        while(vReal[i] != 0 && i != 256)
         {
           //Serial.println("Trying to find last 1");
           //Serial.println(vReal[i]);
           i++; 
+
+          // Reset to mode selection
+          if(digitalRead(resetButton) == LOW) 
+          {
+            Serial.println("Find Tempo Reset");
+            resetArms();
+            reset = true;
+            return -1;
+          }
+
         }
-        //Serial.print("Found 1st index: ");
+        
+        Serial.print("Found 1st index: ");
         idx_first_peak = i - 1;
-        //Serial.println(idx_first_peak);
+        Serial.println(idx_first_peak);
         //Serial.println(vReal[i-1]);
         //Serial.println(vReal[i]);
         break;
       }
     }
-  
+
+    // Find second peak
     for(int i = idx_first_peak +1; i< SAMPLES - idx_first_peak - 1;i++)
     {
       if(vReal[i] == 1 || vReal[i] == 2)
@@ -117,16 +147,51 @@ int findTempo(int (&vReal)[SAMPLES], int (&vTime)[SAMPLES])
       }
     }
     Serial.print("Tempo: " );
+    
+    // Tempo is difference between peaks
     Serial.println(vTime[idx_second_peak-1]-vTime[idx_first_peak]);
-    tempo += vTime[idx_second_peak-1]-vTime[idx_first_peak];
+    tempo[t] = vTime[idx_second_peak-1]-vTime[idx_first_peak];
     t++;
   }
-  // TODO: Handle when we get an outlier
-  return tempo/5;
+
+  //Find mode of array
+  int number = tempo[0];
+  int mode = number;
+  int count = 1;
+  int countMode = 1;
+  
+  for (int i=1; i< 5; i++)
+  {
+        if (tempo[i] == number) 
+        { // count occurrences of the current number
+           ++count;
+        }
+        else
+        { // now this is a different number
+              if (count > countMode) 
+              {
+                    countMode = count; // mode is the biggest ocurrences
+                    mode = number;
+              }
+             count = 1; // reset count for the new number
+             number = tempo[i];
+    }
+  }
+  
+  return mode;
 }
 
-// Method to find Note lengths
-void findNotes(int (&vReal)[SAMPLES], int (&vTime)[SAMPLES], int (&note_length)[16],int avg_tempo)
+/**
+ * Finds note lengths of the song. This is for our time delay detection.
+ * 
+ *
+ * @param &vReal[Samples] is the voltage values from analog sensor (mic or aux cable)
+ * @param &vTime[Samples] are the time stamps of the voltage signal
+ * &note_length[16] holds the length of 16 notes
+ * avg_tempo is the average tempo of the song found from findTempo() method
+ * 
+ */
+void findNotes(int (&vReal)[SAMPLES], int (&vTime)[SAMPLES], int (&note_length)[16],int avg_tempo,bool &reset)
 {
   //Find length of notes
   int idx_first_peak = 0;
@@ -134,6 +199,10 @@ void findNotes(int (&vReal)[SAMPLES], int (&vTime)[SAMPLES], int (&note_length)[
   int t = 0;
   while(t <= 16)
   {
+    if(reset)
+    {
+      break;
+    }
     bool found = false;
     //Find first,last one of note
     for(int i = idx_second_peak; i<(SAMPLES);i++)
@@ -150,6 +219,15 @@ void findNotes(int (&vReal)[SAMPLES], int (&vTime)[SAMPLES], int (&note_length)[
           //Serial.println("Trying to find last 1");
           //Serial.println(vReal[i]);
           i++; 
+          // Reset to mode selection
+          if(digitalRead(resetButton) == LOW) 
+          {
+            Serial.println("Find notes Reset");
+            resetArms();
+            reset = true;
+            break;
+          }
+          
         }
         //Serial.print("Found 2nd index: ");
         idx_second_peak = i;
@@ -163,6 +241,7 @@ void findNotes(int (&vReal)[SAMPLES], int (&vTime)[SAMPLES], int (&note_length)[
         t++;
         found = true;
       }
+      
     }
     
   }
@@ -192,6 +271,10 @@ int findTimeDelay(int (&note_length)[16])
   return -1;
 }
 
+/**
+ * Setups up necessary pins on Arduino
+ * 
+ */
 void setup()
 {
   //inputs
@@ -220,12 +303,11 @@ void setup()
   leftServo.attach(10);
   rightServo.attach(11);
 
-  leftServo.write(122);
-  rightServo.write(58);
+  leftServo.write(80);
+  rightServo.write(122);
 
   sampling_period_ms = 50; //Wait every 50 ms to sample. TODO: Fix this?
   
-
   digitalWrite(PLAY_LED, HIGH);
   digitalWrite(MANUAL_LED, LOW);
   digitalWrite(TEST_LED, LOW);
@@ -237,13 +319,19 @@ void setup()
   Serial.print("Setup Complete\n");
 }
 
+/**
+ * This controls the monkey's arms.
+ * 
+ */
 void toggle() {
+  //Open Hands
   if (leftServo.read() == 122) {
     leftServo.write(80);
   } else {
     leftServo.write(122);
   }
 
+  // Close Hands
   if (rightServo.read() == 58) {
     rightServo.write(110);
   } else {
@@ -251,6 +339,11 @@ void toggle() {
   }
 }
 
+
+/**
+ * This updates the LED for mode selection.
+ * 
+ */
 void LED_update() {
   if (digitalRead(PLAY_LED) == HIGH) {
     digitalWrite(PLAY_LED,LOW);
@@ -267,7 +360,12 @@ void LED_update() {
   }
 }
 
-
+/**
+ * Controls the seven segment display.
+ * 
+ * @param number sets what number to display.
+ * 
+ */
 void displayNum(int number) {
  //number must be greater than or equal to 0 and less than or equal to 9
  
@@ -335,6 +433,10 @@ void displayNum(int number) {
   }
 }
 
+/**
+ * Plays music out of the speakers.
+ * 
+ */
 void play_song(int tempo, int timeDelay) {
   int duration;                  
   //play the song
@@ -345,6 +447,7 @@ void play_song(int tempo, int timeDelay) {
   while (!reset)
   { 
       Serial.print(String(tempo) + "\n\n");
+      Serial.print(String(timeDelay) + "\n\n");
  
       //play the song
       duration = beats[i_note_index] * tempo;
@@ -363,23 +466,37 @@ void play_song(int tempo, int timeDelay) {
       // Reset
       if(digitalRead(resetButton) == LOW) 
       {
-        Serial.println("Reset");
+        Serial.println("Play Song Reset");
+        resetArms();
         reset = true;
       }
       
-      // TODO: Incorporate motors
       // Toggle Motors
-      if(beatSum % 3 == 1) {
+      if(beatSum % 2 == 1) {
         toggle();
-      } 
+      }
       
   }
 }
 
+/**
+ * Main loop.
+ * 
+ * There are three modes:
+ *  1) Play mode: Monkey will listen to music on aux port or Mic and find
+ *  the tempo and time delay and start playing
+ *  
+ *  2) Manual Mode: Monkey will play according to set tempo and octave set by
+ *  the potentiometer and 7-segment display respectively.
+ *  
+ *  3) Debug Mode: Tests will be run to ensure the LEDs, 7-segment display, and
+ *  speakers are working correctly.
+ * 
+ */
 void loop()
 {
 
-  // 7 Segment Display
+  // Control 7 Segment Display
   if ((digitalRead(octaveUp) == LOW) && (digitalRead(octaveDown) == LOW)) {
     //do nothing
   } else if (digitalRead(octaveUp) == LOW) {
@@ -412,7 +529,7 @@ void loop()
     // Play Mode
     if(digitalRead(PLAY_LED) == HIGH)
     {
-        //Serial.print("Play Mode");
+        Serial.print("Play Mode");
         
         // TODO: Incorporate reset pin
         // Check if speaker or mic is connected
@@ -428,13 +545,13 @@ void loop()
         {
           if(count == 5)
           {
-            Serial.println("Listening");
+            //Serial.println("Listening");
             count = 0; // Reset loop if it doesn't break
           }
           analogval = analogRead(analogPin);
           temp[count] = (int) analogval / 650;
           int temp_count = 0;
-          for(int i = 0; i < sizeof(temp)/temp[0]; i++)
+          for(int i = 0; i < count; i++)
           {
             if(temp[i] > 0) 
             {
@@ -449,74 +566,92 @@ void loop()
           // Reset to mode selection
           if(digitalRead(resetButton) == LOW) 
           {
-            Serial.println("Reset");
+            Serial.println("Listening Reset");
+            resetArms();
             reset = true;
           }
            
-          
           count++;
            
         }
-      
+
+        // Once music is detected, we will start tempo detection.
         while(!done && !reset)
         {
-          Serial.println("Starting Tempo Detection");
-      
-          analogval = analogRead(analogPin);
-          scaled_analog = (int) analogval / 650; 
-          //Serial.println(scaled_analog);
-          //Serial.println("Starting to sample");
-          
-          //SAMPLING 
-          for(int i=0; i<SAMPLES; i++)
-          {
-              milliseconds = millis();    //Overflows after around 70 minutes!
-              analogval = analogRead(analogPin);
-              scaled_analog = (int) analogval / 650;
-              vReal[i] = scaled_analog;
-              vTime[i] = millis();
-              
-              // TODO: Reset to mode selection
-              if(digitalRead(resetButton) == LOW) 
-              {
-                Serial.println("Reset");
-                reset = true;
-              }
-           
-              while(millis() < (milliseconds + sampling_period_ms)){} //Wait for X amount of milliseconds
-          }
-        
-          for(int i=0; i<(SAMPLES/2); i++)
-          {
-              //View all these three lines in serial terminal to see which frequencies has which amplitudes
-              //Serial.print((i * 1.0 * SAMPLING_FREQUENCY) / SAMPLES, 1);
-              //Serial.print(" ");
-              //Serial.println(vReal[i], 1);    //View only this line in serial plotter to visualize the bins
-              Serial.print(vReal[i]);
-              //Serial.print(" ");
-              //Serial.print(vTime[i]);
-              //Serial.print("\n");
-          }
-          Serial.print("\n" );
 
-          // TODO: Reset to mode selection
-          if(digitalRead(resetButton) == LOW) 
+          avg_tempo = 0;
+          while(!reset && avg_tempo <= 0)
           {
-            Serial.println("Reset");
-            reset = true;
+            Serial.println("\nStarting Tempo Detection");
+            analogval = analogRead(analogPin);
+            scaled_analog = (int) analogval / 650; 
+            //Serial.println(scaled_analog);
+            //Serial.println("Starting to sample");
+            
+            //SAMPLING 
+            for(int i=0; i<SAMPLES; i++)
+            {
+                milliseconds = millis();    //Overflows after around 70 minutes!
+                analogval = analogRead(analogPin);
+                scaled_analog = (int) analogval / 650;
+                vReal[i] = scaled_analog;
+                vTime[i] = millis();
+                
+                // Reset to mode selection
+                if(digitalRead(resetButton) == LOW) 
+                {
+                  Serial.println("Sampling Reset");
+                  resetArms();
+                  reset = true;
+                  break;
+                }
+             
+                while(millis() < (milliseconds + sampling_period_ms)){} //Wait for X amount of milliseconds
+            }
+
+            // Return to mode selection
+            if(reset)
+            {
+              break;
+            }
+  
+            // For debug purposes only, print the values we recorded from the analog sensor
+            for(int i=0; i<(SAMPLES/2); i++)
+            {
+                //View all these three lines in serial terminal to see which frequencies has which amplitudes
+                //Serial.print((i * 1.0 * SAMPLING_FREQUENCY) / SAMPLES, 1);
+                //Serial.print(" ");
+                //Serial.println(vReal[i], 1);    //View only this line in serial plotter to visualize the bins
+                Serial.print(vReal[i]);
+            }
+            Serial.print("\n" );
+  
+            if(digitalRead(resetButton) == LOW) 
+            {
+              Serial.println("Start tempo detect Reset");
+              resetArms();
+              reset = true;
+              break;
+            }
+          
+            // Find Tempo
+            avg_tempo = findTempo(vReal,vTime,reset);
+            Serial.print("\nMeasured Tempo ");
+            Serial.println(avg_tempo);
+            //Serial.println("\n\n");
           }
-        
-          // Find Tempo
-          avg_tempo = findTempo(vReal,vTime);
-          Serial.print("\nMeasured Tempo ");
-          Serial.println(avg_tempo);
-          //Serial.println("\n\n");
-        
+
+          // Return to mode selection
+          if(reset)
+          {
+            break;
+          }
+
           Serial.println("Starting Time Delay Detection");
         
           //Find length of notes
           int note_length[16];
-          findNotes(vReal,vTime,note_length,avg_tempo);
+          findNotes(vReal,vTime,note_length,avg_tempo,reset);
         
           // Find Time Delay
           timeDelay = findTimeDelay(note_length);
@@ -525,9 +660,7 @@ void loop()
             Serial.print("Measured Time delay: ");
             Serial.println(timeDelay);
             done = true;
-          } else {
-            //TODO: return to top
-          }
+          } 
           
         }
 
@@ -538,7 +671,7 @@ void loop()
     // Debug Mode
     else if (digitalRead(TEST_LED) == HIGH)
     {
-      Serial.print("Debug Mode");
+      //Serial.print("Debug Mode");
 
       // Test #1 Audio Subsystem
       // Description: Play each note on the speakers
@@ -560,6 +693,7 @@ void loop()
         displayNum(i);
         delay(300);
       }
+      displayNum(Octave);
 
       // Flash LEDs
       for(int i = 0; i < 9; i++)
@@ -579,7 +713,7 @@ void loop()
     // Manual Mode
     else if (digitalRead(MANUAL_LED) == HIGH)
     {
-      Serial.print("Manual Mode");
+      //Serial.print("Manual Mode");
       int duration;                  
       //play the song
       int i_note_index = 0;
@@ -598,7 +732,7 @@ void loop()
           //play the song
           duration = beats[i_note_index] * tempo;
           tone(speakerPIN, notes[i_note_index]*pow(2,Octave), duration);
-          delay(duration);
+          delay(duration); // TODO: Needed?
           beatSum += beats[i_note_index];
             
           //increment the note counter
@@ -613,6 +747,7 @@ void loop()
           if(digitalRead(resetButton) == LOW) 
           {
             Serial.println("Reset");
+            resetArms();
             reset = true;
           }
 

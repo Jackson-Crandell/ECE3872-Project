@@ -591,9 +591,9 @@ void loop()
       { 
           //read the tempo pot
           tempo_pot = analogRead(tempoKnob);
-          //Serial.print(String(tempo_pot) + "\n");
+          Serial.print(String(tempo_pot) + "\n");
           tempo = song_tempo*float(tempo_pot)/TempoCal; //read the tempo POT
-          //Serial.print(String(tempo) + "\n\n");
+          Serial.print(String(tempo) + "\n\n");
      
           //play the song
           duration = beats[i_note_index] * tempo;
