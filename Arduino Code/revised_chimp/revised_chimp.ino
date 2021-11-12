@@ -27,7 +27,7 @@
 #define PwmMax 255
 
 
-#define SAMPLES 128              //Must be a power of 2
+#define SAMPLES 128               //Must be a power of 2
 #define SAMPLING_FREQUENCY 10000 //Hz, must be less than 10000 due to ADC
 
 //Music Notes based on Octave--
@@ -79,6 +79,7 @@ unsigned long milliseconds;
 
 /**
    Resets arms and signal with LED reset has occurred.
+
 */
 void resetArms() {
   rightServo.write(80);
@@ -91,10 +92,13 @@ void resetArms() {
 /**
    Finds tempo of song by finding the length of rest notes. It does this
    five times and finds the median as the tempo.
+
+
    @param &vReal[Samples] is the voltage values from analog sensor (mic or aux cable)
    @param &vTime[Samples] are the time stamps of the voltage signal
+
 */
-int findTempo(int (&vReal)[SAMPLES], unsigned long (&vTime)[SAMPLES], bool &reset)
+int findTempo(int (&vReal)[SAMPLES], int (&vTime)[SAMPLES], bool &reset)
 {
   int tempo[5];
   int t = 0;
@@ -115,7 +119,7 @@ int findTempo(int (&vReal)[SAMPLES], unsigned long (&vTime)[SAMPLES], bool &rese
           // Reset to mode selection
           if (digitalRead(resetButton) == LOW)
           {
-            //Serial.println("Find Tempo Reset");
+            Serial.println("Find Tempo Reset");
             resetArms();
             reset = true;
             return -1;
@@ -131,8 +135,6 @@ int findTempo(int (&vReal)[SAMPLES], unsigned long (&vTime)[SAMPLES], bool &rese
         break;
       }
     }
-
-    // TODO: Add error condition for over 256?
 
     // Find second peak
     for (int i = idx_first_peak + 1; i < SAMPLES - idx_first_peak - 1; i++)
@@ -183,8 +185,8 @@ int findTempo(int (&vReal)[SAMPLES], unsigned long (&vTime)[SAMPLES], bool &rese
     j++;
   }
 
-  //Serial.print("Tempo: ");
-  //Serial.println(mode);
+  Serial.print("Tempo: ");
+  Serial.println(mode);
 
   return mode;
 
@@ -193,12 +195,15 @@ int findTempo(int (&vReal)[SAMPLES], unsigned long (&vTime)[SAMPLES], bool &rese
 
 /**
    Finds note lengths of the song. This is for our time delay detection.
+
+
    @param &vReal[Samples] is the voltage values from analog sensor (mic or aux cable)
    @param &vTime[Samples] are the time stamps of the voltage signal
-   &note_length[16] holds the length of 16 notes
+   &note_length[8] holds the length of 8 notes
    avg_tempo is the average tempo of the song found from findTempo() method
+
 */
-void findNotes(int (&vReal)[SAMPLES], unsigned long (&vTime)[SAMPLES], int (&note_length)[16], int avg_tempo, bool &reset)
+void findNotes(int (&vReal)[SAMPLES], int (&vTime)[SAMPLES], int (&note_length)[8], int avg_tempo, bool &reset)
 {
   //Find length of notes
   int idx_first_peak = 0;
@@ -207,7 +212,7 @@ void findNotes(int (&vReal)[SAMPLES], unsigned long (&vTime)[SAMPLES], int (&not
 
   // Set t based on tempo
   
-  while (t <= 16)
+  while (t <= 8)
   {
     bool found = false;
     //Find first,last one of note
@@ -242,7 +247,12 @@ void findNotes(int (&vReal)[SAMPLES], unsigned long (&vTime)[SAMPLES], int (&not
 
         //Serial.println((vTime[idx_second_peak] - vTime[idx_first_peak]) / avg_tempo);
         //Serial.println(1);
-        note_length[t] = (vTime[idx_second_peak] - vTime[idx_first_peak]) / avg_tempo;
+        int len = (vTime[idx_second_peak] - vTime[idx_first_peak]) / avg_tempo;
+        if(len == 3)
+        {
+          len = 2; 
+        }
+        note_length[t] = len;
         t++;
         note_length[t] = 1; // Rest note
         t++;
@@ -271,7 +281,7 @@ void findNotes(int (&vReal)[SAMPLES], unsigned long (&vTime)[SAMPLES], int (&not
 *
 */
 // Method to see if sequence of notes is within beats
-int findTimeDelay(int (&note_length)[16])
+int findTimeDelay(int (&note_length)[8])
 {
   int arr_length = sizeof(beats) / sizeof(beats[0]);
   int time_delay_idx = 0;
@@ -281,7 +291,7 @@ int findTimeDelay(int (&note_length)[16])
   for (int i = 0; i < arr_length - 8; i++)
   {
     if (beats[i] == note_length[0] && beats[i + 1] == note_length[1] && beats[i + 2] == note_length[2] && beats[i + 3] == note_length[3] && beats[i + 4] == note_length[4]
-        && beats[i + 5] == note_length[5] && beats[i + 6] == note_length[6] && beats[i + 7] == note_length[7] && beats[i + 8] == note_length[8])
+        && beats[i + 5] == note_length[5] && beats[i + 6] == note_length[6] && beats[i + 7] == note_length[7])
     {
       //Serial.print("Index: ");
       time_delay_idx = i; // or 7?
@@ -294,6 +304,7 @@ int findTimeDelay(int (&note_length)[16])
 
 /**
    Setups up necessary pins on Arduino
+
 */
 void setup()
 {
@@ -341,6 +352,7 @@ void setup()
 
 /**
    This controls the monkey's arms.
+
 */
 void toggle() {
   //Open Hands
@@ -361,6 +373,7 @@ void toggle() {
 
 /**
    This updates the LED for mode selection.
+
 */
 void LED_update() {
   if (digitalRead(PLAY_LED) == HIGH) {
@@ -380,7 +393,9 @@ void LED_update() {
 
 /**
    Controls the seven segment display.
+
    @param number sets what number to display.
+
 */
 void displayNum(int number) {
   //number must be greater than or equal to 0 and less than or equal to 9
@@ -451,6 +466,7 @@ void displayNum(int number) {
 
 /**
    Plays music out of the speakers.
+
 */
 void play_song(int tempo, int timeDelay) {
   int duration;
@@ -495,13 +511,13 @@ void play_song(int tempo, int timeDelay) {
   }
 }
 
-void sample(int (&vReal)[SAMPLES], unsigned long (&vTime)[SAMPLES], bool &reset, int threshold)
+void sample(int (&vReal)[SAMPLES], int (&vTime)[SAMPLES], bool &reset)
 {
   for (int i = 0; i < SAMPLES; i++)
   {
     milliseconds = millis();
     analogval = analogRead(analogPin);
-    scaled_analog = (int) analogval / threshold;
+    scaled_analog = (int) analogval / 900;
     vReal[i] = scaled_analog;
     vTime[i] = millis();
 
@@ -520,26 +536,24 @@ void sample(int (&vReal)[SAMPLES], unsigned long (&vTime)[SAMPLES], bool &reset,
 
 /**
    Main loop.
+
    There are three modes:
     1) Play mode: Monkey will listen to music on aux port or Mic and find
     the tempo and time delay and start playing
+
     2) Manual Mode: Monkey will play according to set tempo and octave set by
     the potentiometer and 7-segment display respectively.
+
     3) Debug Mode: Tests will be run to ensure the LEDs, 7-segment display, and
     speakers are working correctly.
+
 */
 void loop()
 {
-  int temp_pot;
-  temp_pot = analogRead(tempoKnob);
-  //Serial.println(temp_pot);
 
   //analogval = analogRead(analogPin);
   //Serial.println(analogval);
 
-  //Set threshold for mic/aux
-  int threshold;
-  
   // Control 7 Segment Display
   if ((digitalRead(octaveUp) == LOW) && (digitalRead(octaveDown) == LOW)) {
     //do nothing
@@ -579,7 +593,7 @@ void loop()
       // Wait for audio signal to play
       bool reset = false;
       int vReal[SAMPLES];
-      unsigned long vTime[SAMPLES];
+      int vTime[SAMPLES];
       int temp[5];
       int count = 0;
       unsigned long tempo_time;
@@ -587,17 +601,19 @@ void loop()
       // Wait for notes to be played
       while (!reset)
       {
+        //tempo_time = millis();
         // Reset counter
         if (count == 5)
         {
+          //tempo_time = millis();
           count = 0; // Reset loop if it doesn't break
         }
         analogval = analogRead(analogPin);
-        temp[count] = (int) analogval / 500;
+        temp[count] = (int) analogval;
         int temp_count = 0;
         for (int i = 0; i < count; i++)
         {
-          if (temp[i] > 0)
+          if (temp[i] > 450)
           {
             temp_count++;
           }
@@ -605,13 +621,15 @@ void loop()
         // If notes are being played, start tempo detection
         if (temp_count > 3) 
         {
-           int temp_pot;
-          temp_pot = analogRead(tempoKnob);
-          if(temp_pot < 500){
-            threshold = 475;
-          } else {
-            threshold = 900;
+          int avg = 0;
+          for(int i = 0; i < 5; i++)
+          {
+            //Serial.println(temp[i]);
+            avg += temp[i];
           }
+
+          //Serial.println(avg/5);
+          
           break;
         }
 
@@ -633,9 +651,7 @@ void loop()
 
         while (!reset && avg_tempo <= 0)
         {
-          tempo_time = millis();
-          //Serial.println("Threshold is: ");
-          //Serial.println(threshold);
+          //tempo_time = millis(); 
           //Serial.println("\nStarting Tempo Detection");
           //analogval = analogRead(analogPin);
           //scaled_analog = (int) analogval / 650;
@@ -643,8 +659,8 @@ void loop()
           //Serial.println("Starting to sample");
 
           //SAMPLING
-          sample(vReal,vTime,reset,threshold);
-
+          sample(vReal,vTime,reset);
+          //tempo_time = millis();
           if (reset)
           {
             break;
@@ -653,7 +669,7 @@ void loop()
           if(avg_tempo > 500)
           {
             sampling_period_ms = 100;
-            sample(vReal,vTime,reset,threshold);
+            sample(vReal,vTime,reset);
           }
 
           // For debug purposes only, print the values we recorded from the analog sensor
@@ -669,7 +685,7 @@ void loop()
 
           if (digitalRead(resetButton) == LOW)
           {
-            Serial.println("Start tempo detect Reset");
+            //Serial.println("Start tempo detect Reset");
             resetArms();
             reset = true;
             break;
@@ -680,6 +696,11 @@ void loop()
           avg_tempo = findTempo(vReal, vTime, reset);
           //Serial.print("\nMeasured Tempo ");
           //Serial.println(avg_tempo);
+
+          if(avg_tempo > 3000)
+          {
+            avg_tempo = 0;
+          }
           //Serial.println("\n\n");
         }
 
@@ -690,6 +711,8 @@ void loop()
           sampling_period_ms = 100;
         }
 
+        // Todo for > 200?
+
         if (reset)
         {
           break;
@@ -698,7 +721,7 @@ void loop()
         //Serial.println("Note Length Detection");
 
         //Find length of notes
-        int note_length[16];
+        int note_length[8];
         findNotes(vReal, vTime, note_length, avg_tempo,reset);
 
 
@@ -712,36 +735,52 @@ void loop()
         timeDelay = findTimeDelay(note_length);
         if (timeDelay != -1)
         {
-          //Serial.print("Measured Time delay: ");
-          //Serial.println(timeDelay);
+          Serial.print("Measured Time delay: ");
+          Serial.println(timeDelay);
           unsigned long timeDelay_time = millis();
-          unsigned long added_delay = (timeDelay_time - vTime[timeDelay]);
+          Serial.println("timeDelay_time: ");
+          Serial.println(timeDelay_time);
+          //unsigned int added_delay = (int) (timeDelay_time - tempo_time);
           unsigned int sum = 0;
           unsigned int j = 0;
 
+          Serial.print("Time index i: ");
+          Serial.println(vTime[timeDelay]);
+          //Serial.print("Last index: ");
+          //Serial.println(vTime[127]);
+          unsigned int added_delay = (timeDelay_time - vTime[timeDelay]) / avg_tempo;
+          Serial.print("Added delay: ");
+          Serial.print(added_delay);
+          Serial.println(" beats");
           // Incorporate how long it took to detect the timeDelay
           while(sum < added_delay)
           {
             sum += beats[j] * avg_tempo;
             j++;
+            if(j > 54)
+            {
+              j = 0;
+            }
           }
 
           //Serial.print("Found: ");
           //Serial.println(j);
-          //Serial.print("Time diff: ");
-          //Serial.println(timeDelay_time - tempo_time);
+          Serial.print("Time diff: ");
+          Serial.println(timeDelay_time - tempo_time);
+          Serial.print("Measured Time delay: ");
+          Serial.println(timeDelay);
           //Serial.print("Added delay: ");
           //Serial.println(added_delay);
-          timeDelay += j;
-          timeDelay -= 8;
-          //Serial.print("New Measured Time delay: ");
-          //Serial.println(timeDelay);
+          //timeDelay += j;
 
           // Ensure time delay is within range
           while(timeDelay >= 54)
           {
             timeDelay -= 54;
           }
+
+          Serial.print("Measured Time delay: ");
+          Serial.println(timeDelay);
           
           //timeDelay += added_delay;
           done = true;
